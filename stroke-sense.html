@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Stroke Sense — Deteksi Gerakan Tenis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --court-blue: #1C4870;
+    --court-blue-deep: #123252;
+    --court-blue-darker: #0C2137;
+    --line-white: #F3F1E7;
+    --ball: #D7F24C;
+    --ball-dim: rgba(215,242,76,0.55);
+    --clay: #C1543A;
+    --slate: #7FA0BE;
+    --slate-dim: #4C6B8A;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; height:100%;}
+  body{
+    background: linear-gradient(180deg, var(--court-blue-darker) 0%, var(--court-blue-deep) 100%);
+    color: var(--line-white);
+    font-family:'Inter', system-ui, sans-serif;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+  }
+  .app{
+    width:100%;
+    max-width:480px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom)) 16px;
+    gap:14px;
+  }
+
+  header{ padding: 4px 2px 0 2px; }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:.14em;
+    color: var(--ball);
+    text-transform:uppercase;
+    margin:0 0 4px 0;
+  }
+  h1{
+    font-family:'Oswald', sans-serif;
+    font-weight:700;
+    font-size:28px;
+    letter-spacing:.01em;
+    margin:0;
+    line-height:1.05;
+    color: var(--line-white);
+  }
+  .subtitle{
+    font-size:13px;
+    color: var(--slate);
+    margin:6px 0 0 0;
+    line-height:1.4;
+  }
+
+  .viewfinder{
+    position:relative;
+    width:100%;
+    aspect-ratio: 3/4;
+    background: var(--court-blue-darker);
+    border-radius:10px;
+    overflow:hidden;
+    border:1px solid rgba(215,242,76,0.15);
+  }
+  video, canvas{
+    position:absolute;
+    top:0; left:0;
+    width:100%; height:100%;
+    object-fit:cover;
+  }
+  video{ background:#000; }
+
+  .corner{
+    position:absolute;
+    width:22px; height:22px;
+    border: 2.5px solid var(--ball);
+    z-index:3;
+    opacity:.85;
+  }
+  .corner.tl{ top:10px; left:10px; border-right:none; border-bottom:none; }
+  .corner.tr{ top:10px; right:10px; border-left:none; border-bottom:none; }
+  .corner.bl{ bottom:10px; left:10px; border-right:none; border-top:none; }
+  .corner.br{ bottom:10px; right:10px; border-left:none; border-top:none; }
+
+  .rec-dot{
+    position:absolute; top:14px; left:44px; z-index:4;
+    display:flex; align-items:center; gap:6px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px; letter-spacing:.08em;
+    color: var(--line-white);
+    background: rgba(12,33,55,0.55);
+    padding:3px 8px 3px 6px;
+    border-radius:20px;
+  }
+  .rec-dot .dot{
+    width:7px; height:7px; border-radius:50%;
+    background: var(--clay);
+    display:none;
+  }
+  .rec-dot.live .dot{ display:block; animation: pulse 1.1s infinite ease-in-out; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+
+  .status-overlay{
+    position:absolute; inset:0; z-index:5;
+    display:flex; align-items:center; justify-content:center;
+    text-align:center;
+    padding:28px;
+    background: rgba(12,33,55,0.82);
+    font-size:14px;
+    line-height:1.5;
+    color: var(--line-white);
+  }
+  .status-overlay.hidden{ display:none; }
+  .status-overlay button{
+    display:block; margin:14px auto 0 auto;
+  }
+
+  .readout{
+    background: var(--court-blue-deep);
+    border-radius:10px;
+    padding:16px 18px;
+    border:1px solid rgba(215,242,76,0.12);
+  }
+  .stroke-name{
+    font-family:'Oswald', sans-serif;
+    font-weight:700;
+    font-size:34px;
+    letter-spacing:.02em;
+    color: var(--ball);
+    margin:2px 0 10px 0;
+    min-height:40px;
+    transition: opacity .15s ease;
+  }
+  .stability-row{
+    display:flex; align-items:center; gap:10px;
+  }
+  .stability-track{
+    flex:1;
+    height:6px;
+    background: rgba(255,255,255,0.08);
+    border-radius:3px;
+    overflow:hidden;
+  }
+  .stability-fill{
+    height:100%;
+    width:0%;
+    background: var(--ball);
+    border-radius:3px;
+    transition: width .18s ease;
+  }
+  .stability-pct{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color: var(--slate);
+    min-width:34px;
+    text-align:right;
+  }
+
+  .history{
+    background: rgba(18,50,82,0.5);
+    border-radius:10px;
+    padding:14px 16px;
+    border:1px solid rgba(255,255,255,0.06);
+  }
+  .history-list{
+    display:flex;
+    flex-direction:column;
+    gap:0;
+    max-height:150px;
+    overflow-y:auto;
+  }
+  .history-empty{
+    font-size:13px;
+    color: var(--slate-dim);
+    padding:6px 0 2px 0;
+  }
+  .history-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    font-size:13.5px;
+  }
+  .history-item:last-child{ border-bottom:none; }
+  .history-time{
+    font-family:'IBM Plex Mono', monospace;
+    color: var(--slate);
+    font-size:11.5px;
+  }
+  .history-label{
+    font-family:'Oswald', sans-serif;
+    font-weight:600;
+    letter-spacing:.02em;
+    color: var(--line-white);
+  }
+
+  .controls{
+    display:flex;
+    gap:10px;
+  }
+  button{
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:14.5px;
+    border:none;
+    border-radius:9px;
+    padding:14px 12px;
+    cursor:pointer;
+    transition: filter .12s ease, transform .05s ease;
+  }
+  button:active{ transform: scale(0.98); }
+  #toggleBtn{
+    flex:1.4;
+    background: var(--ball);
+    color: var(--court-blue-darker);
+  }
+  #toggleBtn.stop{
+    background: var(--clay);
+    color: var(--line-white);
+  }
+  #switchBtn{
+    flex:1;
+    background: rgba(255,255,255,0.08);
+    color: var(--line-white);
+    border:1px solid rgba(255,255,255,0.14);
+  }
+  button:hover{ filter:brightness(1.06); }
+  button:disabled{ opacity:.5; cursor:default; }
+
+  .disclaimer{
+    font-size:11.5px;
+    line-height:1.5;
+    color: var(--slate-dim);
+    padding:0 2px;
+    margin:0;
+  }
+
+  ::-webkit-scrollbar{ width:5px; }
+  ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.15); border-radius:3px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <p class="eyebrow">Prototipe · FIKK</p>
+    <h1>STROKE SENSE</h1>
+    <p class="subtitle">Deteksi gerakan tenis real-time dari kamera — arahkan kamera ke pemain untuk membaca posisi tubuh.</p>
+  </header>
+
+  <div class="viewfinder" id="viewfinder">
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <div class="rec-dot" id="recDot"><span class="dot"></span><span id="recLabel">SIAP</span></div>
+    <div class="status-overlay" id="statusOverlay">
+      Tekan "Mulai Kamera" di bawah untuk memulai. Browser akan meminta izin akses kamera.
+    </div>
+  </div>
+
+  <div class="readout">
+    <p class="eyebrow">Gerakan Terdeteksi</p>
+    <div class="stroke-name" id="strokeName">–</div>
+    <div class="stability-row">
+      <div class="stability-track"><div class="stability-fill" id="stabilityBar"></div></div>
+      <div class="stability-pct" id="stabilityPct">0%</div>
+    </div>
+  </div>
+
+  <div class="history">
+    <p class="eyebrow">Riwayat Sesi</p>
+    <div class="history-list" id="historyList">
+      <div class="history-empty" id="historyEmpty">Belum ada gerakan tercatat.</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="toggleBtn">Mulai Kamera</button>
+    <button id="switchBtn">Balik Kamera</button>
+  </div>
+
+  <p class="disclaimer">
+    Ini prototipe klasifikasi <strong>rule-based</strong> (aturan sudut &amp; kecepatan sendi tubuh), bukan model machine learning yang dilatih dari data. Ambang batas kemungkinan perlu disesuaikan dengan sudut, jarak, dan pencahayaan kamera. Untuk hasil publikasi, langkah selanjutnya adalah mengumpulkan data video berlabel dan melatih model (LSTM/TCN).
+  </p>
+
+</div>
+
+<script type="module">
+import {
+  PoseLandmarker,
+  FilesetResolver,
+  DrawingUtils
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
+
+// ---------- DOM ----------
+const video = document.getElementById('video');
+const canvas = document.getElementById('overlay');
+const ctx = canvas.getContext('2d');
+const statusOverlay = document.getElementById('statusOverlay');
+const toggleBtn = document.getElementById('toggleBtn');
+const switchBtn = document.getElementById('switchBtn');
+const strokeNameEl = document.getElementById('strokeName');
+const stabilityBarEl = document.getElementById('stabilityBar');
+const stabilityPctEl = document.getElementById('stabilityPct');
+const historyListEl = document.getElementById('historyList');
+const historyEmptyEl = document.getElementById('historyEmpty');
+const recDot = document.getElementById('recDot');
+const recLabel = document.getElementById('recLabel');
+
+// ---------- State ----------
+let poseLandmarker = null;
+let running = false;
+let currentStream = null;
+let facingMode = 'environment';
+let rafId = null;
+
+const LM = { NOSE:0, L_SHOULDER:11, R_SHOULDER:12, L_ELBOW:13, R_ELBOW:14, L_WRIST:15, R_WRIST:16, L_HIP:23, R_HIP:24 };
+
+const HISTORY_LEN = 10;
+let leftWristHist = [];
+let rightWristHist = [];
+
+const LABEL_SMOOTH_LEN = 8;
+let labelHist = [];
+let lastLoggedLabel = null;
+
+const SPEED_SWING = 0.85; // unit normalisasi/detik — ambang batas awal, perlu dikalibrasi
+const STABILITY_LOG_THRESHOLD = 0.6;
+
+// ---------- Setup model ----------
+async function setupPoseLandmarker() {
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+  );
+  try {
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numPoses: 1
+    });
+  } catch (e) {
+    // fallback ke CPU delegate kalau GPU tidak tersedia di device ini
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+        delegate: "CPU"
+      },
+      runningMode: "VIDEO",
+      numPoses: 1
+    });
+  }
+}
+
+let drawingUtils = null;
+
+// ---------- Camera ----------
+async function startCamera() {
+  toggleBtn.disabled = true;
+  showStatus('Menyiapkan model deteksi pose...');
+  try {
+    if (!poseLandmarker) {
+      await setupPoseLandmarker();
+    }
+    showStatus('Meminta izin kamera...');
+    const constraints = {
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 960 } },
+      audio: false
+    };
+    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = currentStream;
+    await video.play();
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    drawingUtils = new DrawingUtils(ctx);
+
+    applyMirror();
+    hideStatus();
+    running = true;
+    recDot.classList.add('live');
+    toggleBtn.textContent = 'Hentikan Kamera';
+    toggleBtn.classList.add('stop');
+    toggleBtn.disabled = false;
+    resetHistoryState();
+    rafId = requestAnimationFrame(frameLoop);
+  } catch (err) {
+    toggleBtn.disabled = false;
+    showStatus(
+      'Tidak bisa mengakses kamera atau model (' + err.message + '). ' +
+      'Jika ini terjadi di dalam tampilan chat, coba buka artifact ini di tab browser penuh (Chrome/Safari) di HP, lalu izinkan akses kamera.'
+    );
+  }
+}
+
+function stopCamera() {
+  running = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  if (currentStream) {
+    currentStream.getTracks().forEach(t => t.stop());
+    currentStream = null;
+  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  recDot.classList.remove('live');
+  toggleBtn.textContent = 'Mulai Kamera';
+  toggleBtn.classList.remove('stop');
+  showStatus('Kamera dihentikan. Tekan "Mulai Kamera" untuk melanjutkan.');
+  strokeNameEl.textContent = '–';
+  stabilityBarEl.style.width = '0%';
+  stabilityPctEl.textContent = '0%';
+  recLabel.textContent = 'SIAP';
+}
+
+function applyMirror() {
+  const t = facingMode === 'user' ? 'scaleX(-1)' : 'none';
+  video.style.transform = t;
+  canvas.style.transform = t;
+}
+
+switchBtn.addEventListener('click', async () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  applyMirror();
+  if (running) {
+    stopCamera();
+    await startCamera();
+  }
+});
+
+toggleBtn.addEventListener('click', () => {
+  if (running) stopCamera(); else startCamera();
+});
+
+function showStatus(msg) {
+  statusOverlay.textContent = msg;
+  statusOverlay.classList.remove('hidden');
+}
+function hideStatus() {
+  statusOverlay.classList.add('hidden');
+}
+
+// ---------- Detection loop ----------
+async function frameLoop() {
+  if (!running) return;
+  if (video.readyState >= 2) {
+    const nowMs = performance.now();
+    const result = poseLandmarker.detectForVideo(video, nowMs);
+    ctx.save();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (result.landmarks && result.landmarks.length > 0) {
+      const lm = result.landmarks[0];
+
+      drawingUtils.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS, {
+        color: 'rgba(215,242,76,0.85)', lineWidth: 3
+      });
+      drawingUtils.drawLandmarks(lm, {
+        color: '#F3F1E7', fillColor: '#D7F24C', radius: 3
+      });
+
+      const rawLabel = classify(lm);
+      const { label, stability } = smoothLabel(rawLabel);
+      updateReadout(label, stability);
+    } else {
+      const { label, stability } = smoothLabel('TIDAK TERDETEKSI');
+      updateReadout(label, stability);
+    }
+    ctx.restore();
+  }
+  rafId = requestAnimationFrame(frameLoop);
+}
+
+// ---------- Rule-based classification ----------
+function pushHist(buf, pt) {
+  buf.push(pt);
+  if (buf.length > HISTORY_LEN) buf.shift();
+}
+
+function velocityOf(buf) {
+  if (buf.length < 2) return { speed: 0 };
+  const a = buf[0], b = buf[buf.length - 1];
+  const dt = (b.t - a.t) / 1000;
+  if (dt <= 0) return { speed: 0 };
+  const vx = (b.x - a.x) / dt;
+  const vy = (b.y - a.y) / dt;
+  return { speed: Math.hypot(vx, vy) };
+}
+
+function classify(landmarks) {
+  const ls = landmarks[LM.L_SHOULDER], rs = landmarks[LM.R_SHOULDER];
+  const lw = landmarks[LM.L_WRIST], rw = landmarks[LM.R_WRIST];
+  const lh = landmarks[LM.L_HIP], rh = landmarks[LM.R_HIP];
+  const nose = landmarks[LM.NOSE];
+  if (!ls || !rs || !lw || !rw || !lh || !rh || !nose) return 'TIDAK TERDETEKSI';
+
+  const now = performance.now();
+  pushHist(leftWristHist, { x: lw.x, y: lw.y, t: now });
+  pushHist(rightWristHist, { x: rw.x, y: rw.y, t: now });
+
+  const shoulderMidX = (ls.x + rs.x) / 2;
+  const shoulderY = (ls.y + rs.y) / 2;
+  const hipY = (lh.y + rh.y) / 2;
+  const torsoH = Math.max(hipY - shoulderY, 0.05);
+
+  const vL = velocityOf(leftWristHist);
+  const vR = velocityOf(rightWristHist);
+  const activeIsRight = vR.speed >= vL.speed;
+
+  const wrist = activeIsRight ? rw : lw;
+  const v = activeIsRight ? vR : vL;
+
+  const relHeight = (hipY - wrist.y) / torsoH; // 0=setinggi pinggul, 1=setinggi bahu, >1=di atas bahu
+  const side = wrist.x - shoulderMidX;
+  const ownSide = activeIsRight ? side > 0 : side < 0;
+  const isSwinging = v.speed > SPEED_SWING;
+
+  if (relHeight > 1.1 && wrist.y < nose.y + 0.05) {
+    return isSwinging ? 'SERVIS' : 'PERSIAPAN SERVIS';
+  }
+  if (relHeight > 0.15 && relHeight <= 1.1) {
+    if (isSwinging) return ownSide ? 'FOREHAND' : 'BACKHAND';
+    return 'SIAP';
+  }
+  return 'SIAP';
+}
+
+function smoothLabel(label) {
+  labelHist.push(label);
+  if (labelHist.length > LABEL_SMOOTH_LEN) labelHist.shift();
+  const counts = {};
+  labelHist.forEach(l => counts[l] = (counts[l] || 0) + 1);
+  let best = label, bestCount = 0;
+  for (const k in counts) if (counts[k] > bestCount) { best = k; bestCount = counts[k]; }
+  const stability = bestCount / labelHist.length;
+  return { label: best, stability };
+}
+
+// ---------- UI updates ----------
+function resetHistoryState() {
+  leftWristHist = []; rightWristHist = []; labelHist = []; lastLoggedLabel = null;
+}
+
+function updateReadout(label, stability) {
+  strokeNameEl.textContent = label;
+  recLabel.textContent = label;
+  const pct = Math.round(stability * 100);
+  stabilityBarEl.style.width = pct + '%';
+  stabilityPctEl.textContent = pct + '%';
+
+  if (label !== lastLoggedLabel && stability >= STABILITY_LOG_THRESHOLD && label !== 'TIDAK TERDETEKSI') {
+    lastLoggedLabel = label;
+    addHistoryEntry(label);
+  }
+}
+
+function addHistoryEntry(label) {
+  if (historyEmptyEl) historyEmptyEl.remove();
+  const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const row = document.createElement('div');
+  row.className = 'history-item';
+  row.innerHTML = `<span class="history-time">${time}</span><span class="history-label">${label}</span>`;
+  historyListEl.prepend(row);
+  while (historyListEl.children.length > 8) {
+    historyListEl.removeChild(historyListEl.lastChild);
+  }
+}
+</script>
+</body>
+</html>
