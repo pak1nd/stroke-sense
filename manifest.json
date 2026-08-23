@@ -1,0 +1,35 @@
+{
+  "name": "Stroke Sense — Deteksi Gerakan Tenis",
+  "short_name": "Stroke Sense",
+  "description": "Deteksi gerakan tenis real-time berbasis titik tubuh (pose estimation) untuk keperluan riset dan analisis latihan.",
+  "id": "/stroke-sense/",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F1F6F2",
+  "theme_color": "#0E5C3F",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["sports", "education", "utilities"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

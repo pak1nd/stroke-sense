@@ -4,581 +4,601 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Stroke Sense — Deteksi Gerakan Tenis</title>
+
+<!-- ==== Pengaturan PWA (agar bisa dipasang & dijadikan APK) ==== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0E5C3F">
+<meta name="description" content="Deteksi gerakan tenis real-time berbasis titik tubuh untuk keperluan riset dan analisis latihan.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stroke Sense">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
   :root{
-    --court-blue: #1C4870;
-    --court-blue-deep: #123252;
-    --court-blue-darker: #0C2137;
-    --line-white: #F3F1E7;
-    --ball: #D7F24C;
-    --ball-dim: rgba(215,242,76,0.55);
-    --clay: #C1543A;
-    --slate: #7FA0BE;
-    --slate-dim: #4C6B8A;
+    --bg:        #F1F6F2;
+    --surface:   #FFFFFF;
+    --border:    #DDE9E0;
+    --green-900: #083D29;
+    --green-700: #0E5C3F;
+    --green-500: #1F8A5F;
+    --green-300: #6FC79B;
+    --mint:      #E3F3E9;
+    --ink:       #142219;
+    --muted:     #6E8578;
+    --clay:      #B4553C;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0; padding:0; height:100%;}
+  html,body{margin:0; padding:0;}
   body{
-    background: linear-gradient(180deg, var(--court-blue-darker) 0%, var(--court-blue-deep) 100%);
-    color: var(--line-white);
-    font-family:'Inter', system-ui, sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
     min-height:100vh;
     display:flex;
     justify-content:center;
   }
   .app{
-    width:100%;
-    max-width:480px;
-    min-height:100vh;
-    display:flex;
-    flex-direction:column;
-    padding: 18px 16px calc(18px + env(safe-area-inset-bottom)) 16px;
-    gap:14px;
+    width:100%; max-width:480px; min-height:100vh;
+    padding:20px 16px calc(24px + env(safe-area-inset-bottom)) 16px;
+    display:flex; flex-direction:column; gap:14px;
   }
 
-  header{ padding: 4px 2px 0 2px; }
+  /* ---------- Header ---------- */
+  header{ padding:2px 2px 0; }
   .eyebrow{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:11px;
-    letter-spacing:.14em;
-    color: var(--ball);
-    text-transform:uppercase;
-    margin:0 0 4px 0;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--green-500); margin:0 0 6px;
   }
   h1{
-    font-family:'Oswald', sans-serif;
-    font-weight:700;
-    font-size:28px;
-    letter-spacing:.01em;
-    margin:0;
-    line-height:1.05;
-    color: var(--line-white);
+    font-family:'Fraunces',serif; font-weight:600; font-size:32px;
+    line-height:1.02; letter-spacing:-.015em; margin:0; color:var(--green-900);
   }
-  .subtitle{
-    font-size:13px;
-    color: var(--slate);
-    margin:6px 0 0 0;
-    line-height:1.4;
-  }
+  h1 em{ font-style:italic; font-weight:400; color:var(--green-500); }
+  .subtitle{ font-size:13px; line-height:1.45; color:var(--muted); margin:8px 0 0; }
+  .rule{ height:1px; background:var(--border); margin:2px 0; }
 
+  /* ---------- Viewfinder ---------- */
   .viewfinder{
-    position:relative;
-    width:100%;
-    aspect-ratio: 3/4;
-    background: var(--court-blue-darker);
-    border-radius:10px;
-    overflow:hidden;
-    border:1px solid rgba(215,242,76,0.15);
+    position:relative; width:100%; aspect-ratio:3/4;
+    background:var(--green-900); border-radius:14px; overflow:hidden;
+    border:1px solid var(--border);
+    box-shadow:0 6px 22px rgba(8,61,41,.10);
   }
-  video, canvas{
-    position:absolute;
-    top:0; left:0;
-    width:100%; height:100%;
-    object-fit:cover;
-  }
-  video{ background:#000; }
+  video,canvas{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  video{ background:#0B1A13; }
 
-  .corner{
-    position:absolute;
-    width:22px; height:22px;
-    border: 2.5px solid var(--ball);
-    z-index:3;
-    opacity:.85;
+  .chip{
+    position:absolute; top:12px; left:12px; z-index:4;
+    display:flex; align-items:center; gap:7px;
+    background:rgba(255,255,255,.94); color:var(--green-900);
+    padding:6px 11px; border-radius:100px;
+    font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.1em;
+    box-shadow:0 2px 8px rgba(8,61,41,.16);
   }
-  .corner.tl{ top:10px; left:10px; border-right:none; border-bottom:none; }
-  .corner.tr{ top:10px; right:10px; border-left:none; border-bottom:none; }
-  .corner.bl{ bottom:10px; left:10px; border-right:none; border-top:none; }
-  .corner.br{ bottom:10px; right:10px; border-left:none; border-top:none; }
+  .chip .dot{ width:7px; height:7px; border-radius:50%; background:var(--muted); }
+  .chip.live .dot{ background:var(--green-500); animation:pulse 1.4s infinite ease-in-out; }
+  .chip.swing .dot{ background:var(--clay); animation:pulse .5s infinite ease-in-out; }
+  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.3} }
 
-  .rec-dot{
-    position:absolute; top:14px; left:44px; z-index:4;
-    display:flex; align-items:center; gap:6px;
-    font-family:'IBM Plex Mono', monospace;
-    font-size:11px; letter-spacing:.08em;
-    color: var(--line-white);
-    background: rgba(12,33,55,0.55);
-    padding:3px 8px 3px 6px;
-    border-radius:20px;
+  .flash{
+    position:absolute; inset:0; z-index:3; pointer-events:none;
+    border:3px solid var(--green-300); border-radius:14px;
+    opacity:0; transition:opacity .35s ease;
   }
-  .rec-dot .dot{
-    width:7px; height:7px; border-radius:50%;
-    background: var(--clay);
-    display:none;
-  }
-  .rec-dot.live .dot{ display:block; animation: pulse 1.1s infinite ease-in-out; }
-  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+  .flash.on{ opacity:1; transition:opacity .05s ease; }
 
-  .status-overlay{
+  .overlay-msg{
     position:absolute; inset:0; z-index:5;
-    display:flex; align-items:center; justify-content:center;
-    text-align:center;
-    padding:28px;
-    background: rgba(12,33,55,0.82);
-    font-size:14px;
-    line-height:1.5;
-    color: var(--line-white);
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    padding:30px; background:rgba(8,61,41,.90); color:#EAF4EE;
+    font-size:13.5px; line-height:1.55;
   }
-  .status-overlay.hidden{ display:none; }
-  .status-overlay button{
-    display:block; margin:14px auto 0 auto;
+  .overlay-msg.hidden{ display:none; }
+
+  /* ---------- Cards ---------- */
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; padding:16px 18px;
+  }
+  .stroke{
+    font-family:'Fraunces',serif; font-weight:600; font-size:38px;
+    letter-spacing:-.02em; color:var(--green-700); margin:4px 0 2px;
+    line-height:1.05; min-height:42px;
+  }
+  .stroke.idle{ color:var(--muted); font-weight:400; font-style:italic; font-size:30px; }
+  .meta{
+    display:flex; gap:18px; margin-top:10px; padding-top:12px;
+    border-top:1px solid var(--border);
+  }
+  .meta div{ flex:1; }
+  .meta .k{
+    font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--muted); display:block; margin-bottom:3px;
+  }
+  .meta .v{ font-family:'Fraunces',serif; font-size:19px; font-weight:600; color:var(--green-900); }
+
+  /* ---------- Stats ---------- */
+  .stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .stat{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:13px 10px; text-align:center;
+  }
+  .stat .n{ font-family:'Fraunces',serif; font-size:26px; font-weight:600; color:var(--green-700); line-height:1; }
+  .stat .l{
+    font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--muted); margin-top:6px;
   }
 
-  .readout{
-    background: var(--court-blue-deep);
-    border-radius:10px;
-    padding:16px 18px;
-    border:1px solid rgba(215,242,76,0.12);
-  }
-  .stroke-name{
-    font-family:'Oswald', sans-serif;
-    font-weight:700;
-    font-size:34px;
-    letter-spacing:.02em;
-    color: var(--ball);
-    margin:2px 0 10px 0;
-    min-height:40px;
-    transition: opacity .15s ease;
-  }
-  .stability-row{
+  /* ---------- History ---------- */
+  .hist-list{ max-height:160px; overflow-y:auto; margin-top:6px; }
+  .hist-empty{ font-size:13px; color:var(--muted); font-style:italic; padding:4px 0; }
+  .hist-row{
     display:flex; align-items:center; gap:10px;
+    padding:9px 0; border-bottom:1px solid var(--border); font-size:13.5px;
   }
-  .stability-track{
-    flex:1;
-    height:6px;
-    background: rgba(255,255,255,0.08);
-    border-radius:3px;
-    overflow:hidden;
-  }
-  .stability-fill{
-    height:100%;
-    width:0%;
-    background: var(--ball);
-    border-radius:3px;
-    transition: width .18s ease;
-  }
-  .stability-pct{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:12px;
-    color: var(--slate);
-    min-width:34px;
-    text-align:right;
-  }
+  .hist-row:last-child{ border-bottom:none; }
+  .hist-t{ font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--muted); }
+  .hist-n{ font-family:'Fraunces',serif; font-weight:600; font-size:15px; color:var(--green-900); flex:1; }
+  .hist-s{ font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--green-500); }
 
-  .history{
-    background: rgba(18,50,82,0.5);
-    border-radius:10px;
-    padding:14px 16px;
-    border:1px solid rgba(255,255,255,0.06);
-  }
-  .history-list{
-    display:flex;
-    flex-direction:column;
-    gap:0;
-    max-height:150px;
-    overflow-y:auto;
-  }
-  .history-empty{
-    font-size:13px;
-    color: var(--slate-dim);
-    padding:6px 0 2px 0;
-  }
-  .history-item{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:7px 0;
-    border-bottom:1px solid rgba(255,255,255,0.06);
-    font-size:13.5px;
-  }
-  .history-item:last-child{ border-bottom:none; }
-  .history-time{
-    font-family:'IBM Plex Mono', monospace;
-    color: var(--slate);
-    font-size:11.5px;
-  }
-  .history-label{
-    font-family:'Oswald', sans-serif;
-    font-weight:600;
-    letter-spacing:.02em;
-    color: var(--line-white);
-  }
-
-  .controls{
-    display:flex;
-    gap:10px;
-  }
+  /* ---------- Controls ---------- */
+  .controls{ display:flex; gap:9px; }
   button{
-    font-family:'Inter', sans-serif;
-    font-weight:600;
-    font-size:14.5px;
-    border:none;
-    border-radius:9px;
-    padding:14px 12px;
-    cursor:pointer;
-    transition: filter .12s ease, transform .05s ease;
+    font-family:'Inter',sans-serif; font-weight:600; font-size:14.5px;
+    border:none; border-radius:11px; padding:15px 12px; cursor:pointer;
+    transition:filter .12s ease, transform .05s ease;
   }
-  button:active{ transform: scale(0.98); }
-  #toggleBtn{
-    flex:1.4;
-    background: var(--ball);
-    color: var(--court-blue-darker);
+  button:active{ transform:scale(.985); }
+  button:disabled{ opacity:.45; cursor:default; }
+  #startBtn{ flex:1.5; background:var(--green-700); color:#fff; }
+  #startBtn.stop{ background:var(--clay); }
+  .btn-ghost{
+    flex:1; background:var(--surface); color:var(--green-700);
+    border:1px solid var(--border);
   }
-  #toggleBtn.stop{
-    background: var(--clay);
-    color: var(--line-white);
-  }
-  #switchBtn{
-    flex:1;
-    background: rgba(255,255,255,0.08);
-    color: var(--line-white);
-    border:1px solid rgba(255,255,255,0.14);
-  }
-  button:hover{ filter:brightness(1.06); }
-  button:disabled{ opacity:.5; cursor:default; }
+  button:hover{ filter:brightness(1.05); }
 
-  .disclaimer{
-    font-size:11.5px;
-    line-height:1.5;
-    color: var(--slate-dim);
-    padding:0 2px;
-    margin:0;
+  /* ---------- Calibration ---------- */
+  details.calib{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:0 18px; overflow:hidden;
+  }
+  details.calib summary{
+    list-style:none; cursor:pointer; padding:15px 0;
+    font-family:'JetBrains Mono',monospace; font-size:10.5px;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--green-500);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  details.calib summary::-webkit-details-marker{ display:none; }
+  details.calib summary::after{ content:'+'; font-size:16px; color:var(--muted); }
+  details.calib[open] summary::after{ content:'–'; }
+  .slider-row{ padding:6px 0 16px; }
+  .slider-row label{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:13px; color:var(--ink); margin-bottom:9px;
+  }
+  .slider-row label b{ font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--green-700); font-weight:500; }
+  .slider-row .hint{ font-size:11.5px; color:var(--muted); line-height:1.45; margin-top:7px; }
+  input[type=range]{
+    -webkit-appearance:none; width:100%; height:3px; border-radius:2px;
+    background:var(--mint); outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:20px; height:20px; border-radius:50%;
+    background:var(--green-700); cursor:pointer; border:3px solid #fff;
+    box-shadow:0 1px 5px rgba(8,61,41,.3);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:20px; height:20px; border-radius:50%; background:var(--green-700);
+    cursor:pointer; border:3px solid #fff;
   }
 
-  ::-webkit-scrollbar{ width:5px; }
-  ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.15); border-radius:3px; }
+  .note{ font-size:11.5px; line-height:1.55; color:var(--muted); padding:0 4px; margin:0; }
+  .note b{ color:var(--green-700); }
+
+  ::-webkit-scrollbar{ width:4px; }
+  ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:2px; }
 </style>
 </head>
 <body>
 <div class="app">
 
   <header>
-    <p class="eyebrow">Prototipe · FIKK</p>
-    <h1>STROKE SENSE</h1>
-    <p class="subtitle">Deteksi gerakan tenis real-time dari kamera — arahkan kamera ke pemain untuk membaca posisi tubuh.</p>
+    <p class="eyebrow">Prototipe Riset · FIKK</p>
+    <h1>Stroke <em>Sense</em></h1>
+    <p class="subtitle">Deteksi gerakan tenis real-time berbasis titik tubuh — sistem menunggu ayunan utuh sebelum memberi label.</p>
   </header>
+  <div class="rule"></div>
 
   <div class="viewfinder" id="viewfinder">
     <video id="video" playsinline muted></video>
     <canvas id="overlay"></canvas>
-    <div class="corner tl"></div>
-    <div class="corner tr"></div>
-    <div class="corner bl"></div>
-    <div class="corner br"></div>
-    <div class="rec-dot" id="recDot"><span class="dot"></span><span id="recLabel">SIAP</span></div>
-    <div class="status-overlay" id="statusOverlay">
-      Tekan "Mulai Kamera" di bawah untuk memulai. Browser akan meminta izin akses kamera.
+    <div class="flash" id="flash"></div>
+    <div class="chip" id="chip"><span class="dot"></span><span id="chipText">SIAP MULAI</span></div>
+    <div class="overlay-msg" id="overlayMsg">
+      Tekan <strong>Mulai Kamera</strong> di bawah, lalu izinkan akses kamera.
     </div>
   </div>
 
-  <div class="readout">
-    <p class="eyebrow">Gerakan Terdeteksi</p>
-    <div class="stroke-name" id="strokeName">–</div>
-    <div class="stability-row">
-      <div class="stability-track"><div class="stability-fill" id="stabilityBar"></div></div>
-      <div class="stability-pct" id="stabilityPct">0%</div>
+  <div class="card">
+    <p class="eyebrow">Ayunan Terakhir</p>
+    <div class="stroke idle" id="strokeName">menunggu ayunan…</div>
+    <div class="meta">
+      <div><span class="k">Kec. Puncak</span><span class="v" id="mSpeed">–</span></div>
+      <div><span class="k">Durasi</span><span class="v" id="mDur">–</span></div>
+      <div><span class="k">Lengan</span><span class="v" id="mArm">–</span></div>
     </div>
   </div>
 
-  <div class="history">
+  <div class="stats">
+    <div class="stat"><div class="n" id="cFH">0</div><div class="l">Forehand</div></div>
+    <div class="stat"><div class="n" id="cBH">0</div><div class="l">Backhand</div></div>
+    <div class="stat"><div class="n" id="cSV">0</div><div class="l">Servis</div></div>
+  </div>
+
+  <div class="card">
     <p class="eyebrow">Riwayat Sesi</p>
-    <div class="history-list" id="historyList">
-      <div class="history-empty" id="historyEmpty">Belum ada gerakan tercatat.</div>
+    <div class="hist-list" id="histList">
+      <div class="hist-empty" id="histEmpty">Belum ada ayunan terdeteksi.</div>
     </div>
   </div>
 
   <div class="controls">
-    <button id="toggleBtn">Mulai Kamera</button>
-    <button id="switchBtn">Balik Kamera</button>
+    <button id="startBtn">Mulai Kamera</button>
+    <button id="flipBtn" class="btn-ghost">Balik Kamera</button>
   </div>
 
-  <p class="disclaimer">
-    Ini prototipe klasifikasi <strong>rule-based</strong> (aturan sudut &amp; kecepatan sendi tubuh), bukan model machine learning yang dilatih dari data. Ambang batas kemungkinan perlu disesuaikan dengan sudut, jarak, dan pencahayaan kamera. Untuk hasil publikasi, langkah selanjutnya adalah mengumpulkan data video berlabel dan melatih model (LSTM/TCN).
+  <details class="calib">
+    <summary>Kalibrasi Deteksi</summary>
+    <div class="slider-row">
+      <label>Sensitivitas ayunan <b id="vSens">3.0</b></label>
+      <input type="range" id="sSens" min="1.5" max="6" step="0.1" value="3">
+      <p class="hint">Turunkan bila ayunan asli tidak terbaca; naikkan bila gerakan biasa ikut terdeteksi sebagai pukulan.</p>
+    </div>
+    <div class="slider-row">
+      <label>Ambang tinggi servis <b id="vServe">1.70</b></label>
+      <input type="range" id="sServe" min="1.3" max="2.2" step="0.05" value="1.7">
+      <p class="hint">Tinggi pergelangan tangan (satuan panjang badan, bahu ≈ 1.0) agar ayunan dihitung sebagai servis.</p>
+    </div>
+    <div class="slider-row">
+      <button class="btn-ghost" id="resetBtn" style="width:100%">Reset Statistik Sesi</button>
+    </div>
+  </details>
+
+  <p class="note">
+    <b>Catatan metodologis.</b> Klasifikasi ini masih <b>rule-based</b> (analisis lintasan &amp; kecepatan sendi), bukan model machine learning terlatih. Nilai kalibrasi bersifat empiris dan perlu disesuaikan per sudut kamera. Untuk publikasi, sistem ini diposisikan sebagai <b>baseline pembanding</b> terhadap model LSTM/TCN yang dilatih dari dataset berlabel.
   </p>
 
 </div>
 
 <script type="module">
-import {
-  PoseLandmarker,
-  FilesetResolver,
-  DrawingUtils
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
+import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-// ---------- DOM ----------
-const video = document.getElementById('video');
-const canvas = document.getElementById('overlay');
-const ctx = canvas.getContext('2d');
-const statusOverlay = document.getElementById('statusOverlay');
-const toggleBtn = document.getElementById('toggleBtn');
-const switchBtn = document.getElementById('switchBtn');
-const strokeNameEl = document.getElementById('strokeName');
-const stabilityBarEl = document.getElementById('stabilityBar');
-const stabilityPctEl = document.getElementById('stabilityPct');
-const historyListEl = document.getElementById('historyList');
-const historyEmptyEl = document.getElementById('historyEmpty');
-const recDot = document.getElementById('recDot');
-const recLabel = document.getElementById('recLabel');
+/* ============ DOM ============ */
+const video   = document.getElementById('video');
+const canvas  = document.getElementById('overlay');
+const ctx     = canvas.getContext('2d');
+const overlayMsg = document.getElementById('overlayMsg');
+const chip    = document.getElementById('chip');
+const chipText= document.getElementById('chipText');
+const flash   = document.getElementById('flash');
+const startBtn= document.getElementById('startBtn');
+const flipBtn = document.getElementById('flipBtn');
+const resetBtn= document.getElementById('resetBtn');
+const strokeEl= document.getElementById('strokeName');
+const mSpeed  = document.getElementById('mSpeed');
+const mDur    = document.getElementById('mDur');
+const mArm    = document.getElementById('mArm');
+const cFH=document.getElementById('cFH'), cBH=document.getElementById('cBH'), cSV=document.getElementById('cSV');
+const histList=document.getElementById('histList'), histEmpty=document.getElementById('histEmpty');
+const sSens=document.getElementById('sSens'), vSens=document.getElementById('vSens');
+const sServe=document.getElementById('sServe'), vServe=document.getElementById('vServe');
 
-// ---------- State ----------
-let poseLandmarker = null;
-let running = false;
-let currentStream = null;
-let facingMode = 'environment';
-let rafId = null;
+/* ============ Konfigurasi ============ */
+const cfg = { peakSpeed:3.0, serveHeight:1.70 };
+sSens.addEventListener('input', e=>{ cfg.peakSpeed=parseFloat(e.target.value); vSens.textContent=cfg.peakSpeed.toFixed(1); });
+sServe.addEventListener('input', e=>{ cfg.serveHeight=parseFloat(e.target.value); vServe.textContent=cfg.serveHeight.toFixed(2); });
 
-const LM = { NOSE:0, L_SHOULDER:11, R_SHOULDER:12, L_ELBOW:13, R_ELBOW:14, L_WRIST:15, R_WRIST:16, L_HIP:23, R_HIP:24 };
+const L = { NOSE:0, L_SH:11, R_SH:12, L_EL:13, R_EL:14, L_WR:15, R_WR:16, L_HIP:23, R_HIP:24 };
+const VIS_MIN = 0.5;            // ambang keyakinan landmark
+const EMA = 0.55;               // smoothing landmark (anti-getar)
+const BUF_MS = 1400;            // panjang riwayat lintasan
+const SWING_MIN_MS = 130, SWING_MAX_MS = 1600;
+const END_QUIET_MS = 150;       // durasi diam untuk menutup ayunan
+const COOLDOWN_MS = 500;
+const MIN_LATERAL_TRAVEL = 0.45; // travel minimum groundstroke (satuan setengah-bahu)
 
-const HISTORY_LEN = 10;
-let leftWristHist = [];
-let rightWristHist = [];
+/* ============ State ============ */
+let landmarker=null, running=false, stream=null, facing='environment', raf=null;
+let smooth=null;
+let bufL=[], bufR=[];
+let swing={ active:false, arm:'R', t0:0, peak:0, samples:[] };
+let quietSince=0, cooldownUntil=0;
+let counts={ FOREHAND:0, BACKHAND:0, SERVIS:0 };
 
-const LABEL_SMOOTH_LEN = 8;
-let labelHist = [];
-let lastLoggedLabel = null;
-
-const SPEED_SWING = 0.85; // unit normalisasi/detik — ambang batas awal, perlu dikalibrasi
-const STABILITY_LOG_THRESHOLD = 0.6;
-
-// ---------- Setup model ----------
-async function setupPoseLandmarker() {
+/* ============ Model ============ */
+async function initModel(){
   const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
-  try {
-    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
-        delegate: "GPU"
-      },
-      runningMode: "VIDEO",
-      numPoses: 1
-    });
-  } catch (e) {
-    // fallback ke CPU delegate kalau GPU tidak tersedia di device ini
-    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
-        delegate: "CPU"
-      },
-      runningMode: "VIDEO",
-      numPoses: 1
-    });
-  }
+  const opts = (path, delegate) => ({
+    baseOptions:{ modelAssetPath:path, delegate },
+    runningMode:"VIDEO", numPoses:1,
+    minPoseDetectionConfidence:0.6, minPosePresenceConfidence:0.6, minTrackingConfidence:0.6
+  });
+  const FULL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
+  const LITE = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
+  try       { landmarker = await PoseLandmarker.createFromOptions(vision, opts(FULL,"GPU")); }
+  catch(e1) { try { landmarker = await PoseLandmarker.createFromOptions(vision, opts(FULL,"CPU")); }
+              catch(e2){ landmarker = await PoseLandmarker.createFromOptions(vision, opts(LITE,"CPU")); } }
 }
 
-let drawingUtils = null;
-
-// ---------- Camera ----------
-async function startCamera() {
-  toggleBtn.disabled = true;
-  showStatus('Menyiapkan model deteksi pose...');
-  try {
-    if (!poseLandmarker) {
-      await setupPoseLandmarker();
-    }
-    showStatus('Meminta izin kamera...');
-    const constraints = {
-      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 960 } },
-      audio: false
-    };
-    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = currentStream;
+/* ============ Kamera ============ */
+async function start(){
+  startBtn.disabled = true;
+  msg('Menyiapkan model deteksi pose…');
+  try{
+    if(!landmarker) await initModel();
+    msg('Meminta izin kamera…');
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:facing}, width:{ideal:1280}, height:{ideal:960} }, audio:false
+    });
+    video.srcObject = stream;
     await video.play();
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    drawingUtils = new DrawingUtils(ctx);
-
-    applyMirror();
-    hideStatus();
+    sizeCanvas();
+    mirror();
+    hideMsg();
     running = true;
-    recDot.classList.add('live');
-    toggleBtn.textContent = 'Hentikan Kamera';
-    toggleBtn.classList.add('stop');
-    toggleBtn.disabled = false;
-    resetHistoryState();
-    rafId = requestAnimationFrame(frameLoop);
-  } catch (err) {
-    toggleBtn.disabled = false;
-    showStatus(
-      'Tidak bisa mengakses kamera atau model (' + err.message + '). ' +
-      'Jika ini terjadi di dalam tampilan chat, coba buka artifact ini di tab browser penuh (Chrome/Safari) di HP, lalu izinkan akses kamera.'
-    );
+    resetTracking();
+    chip.classList.add('live');
+    startBtn.textContent='Hentikan'; startBtn.classList.add('stop'); startBtn.disabled=false;
+    raf = requestAnimationFrame(loop);
+  }catch(err){
+    startBtn.disabled=false;
+    msg('Gagal mengakses kamera atau model ('+err.message+'). Pastikan halaman dibuka lewat alamat https:// di Chrome/Safari, lalu izinkan akses kamera.');
   }
 }
-
-function stopCamera() {
-  running = false;
-  if (rafId) cancelAnimationFrame(rafId);
-  if (currentStream) {
-    currentStream.getTracks().forEach(t => t.stop());
-    currentStream = null;
-  }
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  recDot.classList.remove('live');
-  toggleBtn.textContent = 'Mulai Kamera';
-  toggleBtn.classList.remove('stop');
-  showStatus('Kamera dihentikan. Tekan "Mulai Kamera" untuk melanjutkan.');
-  strokeNameEl.textContent = '–';
-  stabilityBarEl.style.width = '0%';
-  stabilityPctEl.textContent = '0%';
-  recLabel.textContent = 'SIAP';
+function stop(){
+  running=false;
+  if(raf) cancelAnimationFrame(raf);
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  chip.classList.remove('live','swing'); chipText.textContent='BERHENTI';
+  startBtn.textContent='Mulai Kamera'; startBtn.classList.remove('stop');
+  msg('Kamera dihentikan. Tekan Mulai Kamera untuk melanjutkan.');
 }
+function sizeCanvas(){ canvas.width=video.videoWidth||720; canvas.height=video.videoHeight||960; }
+function mirror(){ const t = facing==='user' ? 'scaleX(-1)':'none'; video.style.transform=t; canvas.style.transform=t; }
+function msg(t){ overlayMsg.innerHTML=t; overlayMsg.classList.remove('hidden'); }
+function hideMsg(){ overlayMsg.classList.add('hidden'); }
+function resetTracking(){ smooth=null; bufL=[]; bufR=[]; swing.active=false; quietSince=0; cooldownUntil=0; }
 
-function applyMirror() {
-  const t = facingMode === 'user' ? 'scaleX(-1)' : 'none';
-  video.style.transform = t;
-  canvas.style.transform = t;
-}
-
-switchBtn.addEventListener('click', async () => {
-  facingMode = facingMode === 'environment' ? 'user' : 'environment';
-  applyMirror();
-  if (running) {
-    stopCamera();
-    await startCamera();
-  }
+startBtn.addEventListener('click',()=> running?stop():start());
+flipBtn.addEventListener('click', async ()=>{
+  facing = facing==='environment' ? 'user':'environment';
+  mirror();
+  if(running){ stop(); await start(); }
 });
-
-toggleBtn.addEventListener('click', () => {
-  if (running) stopCamera(); else startCamera();
+resetBtn.addEventListener('click',()=>{
+  counts={FOREHAND:0,BACKHAND:0,SERVIS:0}; renderCounts();
+  histList.innerHTML=''; histList.appendChild(histEmpty); histEmpty.style.display='block';
+  strokeEl.textContent='menunggu ayunan…'; strokeEl.classList.add('idle');
+  mSpeed.textContent='–'; mDur.textContent='–'; mArm.textContent='–';
 });
+window.addEventListener('resize', ()=>{ if(running) sizeCanvas(); });
 
-function showStatus(msg) {
-  statusOverlay.textContent = msg;
-  statusOverlay.classList.remove('hidden');
-}
-function hideStatus() {
-  statusOverlay.classList.add('hidden');
-}
-
-// ---------- Detection loop ----------
-async function frameLoop() {
-  if (!running) return;
-  if (video.readyState >= 2) {
-    const nowMs = performance.now();
-    const result = poseLandmarker.detectForVideo(video, nowMs);
-    ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (result.landmarks && result.landmarks.length > 0) {
-      const lm = result.landmarks[0];
-
-      drawingUtils.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS, {
-        color: 'rgba(215,242,76,0.85)', lineWidth: 3
-      });
-      drawingUtils.drawLandmarks(lm, {
-        color: '#F3F1E7', fillColor: '#D7F24C', radius: 3
-      });
-
-      const rawLabel = classify(lm);
-      const { label, stability } = smoothLabel(rawLabel);
-      updateReadout(label, stability);
-    } else {
-      const { label, stability } = smoothLabel('TIDAK TERDETEKSI');
-      updateReadout(label, stability);
+/* ============ Loop ============ */
+function loop(){
+  if(!running) return;
+  if(video.readyState>=2){
+    const res = landmarker.detectForVideo(video, performance.now());
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(res.landmarks && res.landmarks.length){
+      const lm = smoothLM(res.landmarks[0]);
+      if(keyVisible(lm)){ draw(lm); track(lm); }
+      else { draw(lm); setChip('POSISI TIDAK JELAS'); }
+    }else{
+      setChip('TIDAK ADA PEMAIN'); smooth=null; bufL=[]; bufR=[];
     }
-    ctx.restore();
   }
-  rafId = requestAnimationFrame(frameLoop);
+  raf = requestAnimationFrame(loop);
 }
 
-// ---------- Rule-based classification ----------
-function pushHist(buf, pt) {
-  buf.push(pt);
-  if (buf.length > HISTORY_LEN) buf.shift();
-}
-
-function velocityOf(buf) {
-  if (buf.length < 2) return { speed: 0 };
-  const a = buf[0], b = buf[buf.length - 1];
-  const dt = (b.t - a.t) / 1000;
-  if (dt <= 0) return { speed: 0 };
-  const vx = (b.x - a.x) / dt;
-  const vy = (b.y - a.y) / dt;
-  return { speed: Math.hypot(vx, vy) };
-}
-
-function classify(landmarks) {
-  const ls = landmarks[LM.L_SHOULDER], rs = landmarks[LM.R_SHOULDER];
-  const lw = landmarks[LM.L_WRIST], rw = landmarks[LM.R_WRIST];
-  const lh = landmarks[LM.L_HIP], rh = landmarks[LM.R_HIP];
-  const nose = landmarks[LM.NOSE];
-  if (!ls || !rs || !lw || !rw || !lh || !rh || !nose) return 'TIDAK TERDETEKSI';
-
-  const now = performance.now();
-  pushHist(leftWristHist, { x: lw.x, y: lw.y, t: now });
-  pushHist(rightWristHist, { x: rw.x, y: rw.y, t: now });
-
-  const shoulderMidX = (ls.x + rs.x) / 2;
-  const shoulderY = (ls.y + rs.y) / 2;
-  const hipY = (lh.y + rh.y) / 2;
-  const torsoH = Math.max(hipY - shoulderY, 0.05);
-
-  const vL = velocityOf(leftWristHist);
-  const vR = velocityOf(rightWristHist);
-  const activeIsRight = vR.speed >= vL.speed;
-
-  const wrist = activeIsRight ? rw : lw;
-  const v = activeIsRight ? vR : vL;
-
-  const relHeight = (hipY - wrist.y) / torsoH; // 0=setinggi pinggul, 1=setinggi bahu, >1=di atas bahu
-  const side = wrist.x - shoulderMidX;
-  const ownSide = activeIsRight ? side > 0 : side < 0;
-  const isSwinging = v.speed > SPEED_SWING;
-
-  if (relHeight > 1.1 && wrist.y < nose.y + 0.05) {
-    return isSwinging ? 'SERVIS' : 'PERSIAPAN SERVIS';
+function smoothLM(lm){
+  if(!smooth){ smooth = lm.map(p=>({x:p.x,y:p.y,visibility:p.visibility??1})); return smooth; }
+  for(let i=0;i<lm.length;i++){
+    smooth[i].x = EMA*lm[i].x + (1-EMA)*smooth[i].x;
+    smooth[i].y = EMA*lm[i].y + (1-EMA)*smooth[i].y;
+    smooth[i].visibility = lm[i].visibility ?? 1;
   }
-  if (relHeight > 0.15 && relHeight <= 1.1) {
-    if (isSwinging) return ownSide ? 'FOREHAND' : 'BACKHAND';
-    return 'SIAP';
+  return smooth;
+}
+function keyVisible(lm){
+  return [L.L_SH,L.R_SH,L.L_HIP,L.R_HIP].every(i => (lm[i].visibility??1) >= VIS_MIN)
+      && ((lm[L.L_WR].visibility??1) >= VIS_MIN || (lm[L.R_WR].visibility??1) >= VIS_MIN);
+}
+
+/* ============ Kerangka acuan tubuh ============ */
+function frame(lm){
+  const ls=lm[L.L_SH], rs=lm[L.R_SH], lh=lm[L.L_HIP], rh=lm[L.R_HIP];
+  const shX=(ls.x+rs.x)/2, shY=(ls.y+rs.y)/2;
+  const hpX=(lh.x+rh.x)/2, hpY=(lh.y+rh.y)/2;
+  const torso=Math.max(Math.hypot(hpX-shX, hpY-shY), 0.04);
+  const span = rs.x - ls.x;                 // bertanda: menangani orientasi/mirror
+  const half = Math.max(Math.abs(span)/2, 0.02);
+  return { shX, shY, hpX, hpY, torso, span, half };
+}
+// lateral: + = ke sisi kanan anatomis pemain, satuan setengah lebar bahu
+// height : tinggi dari garis pinggul, satuan panjang badan (bahu ≈ 1.0)
+function toBody(pt,F){
+  return {
+    lateral: ((pt.x - F.shX)/F.half) * Math.sign(F.span||1),
+    height : (F.hpY - pt.y)/F.torso
+  };
+}
+function speedOf(buf){
+  if(buf.length<3) return 0;
+  const b=buf[buf.length-1]; let a=buf[0];
+  for(let i=buf.length-2;i>=0;i--){ if(b.t-buf[i].t>=80){ a=buf[i]; break; } }
+  const dt=(b.t-a.t)/1000; if(dt<=0) return 0;
+  return Math.hypot(b.lateral-a.lateral, b.height-a.height)/dt;
+}
+function pushBuf(buf,s){ buf.push(s); while(buf.length && s.t-buf[0].t>BUF_MS) buf.shift(); }
+
+/* ============ Pelacakan & mesin-status ayunan ============ */
+function track(lm){
+  const now=performance.now();
+  const F=frame(lm);
+  const l=toBody(lm[L.L_WR],F), r=toBody(lm[L.R_WR],F);
+  pushBuf(bufL,{t:now,...l}); pushBuf(bufR,{t:now,...r});
+
+  const spL=speedOf(bufL), spR=speedOf(bufR);
+  const startTh = cfg.peakSpeed*0.55, endTh = cfg.peakSpeed*0.32;
+
+  if(!swing.active){
+    const arm = spR>=spL ? 'R':'L';
+    const sp  = Math.max(spL,spR);
+    if(sp>startTh && now>cooldownUntil){
+      const buf = arm==='R'?bufR:bufL;
+      // sertakan konteks 220 ms sebelum ayunan mulai (fase backswing)
+      const pre = buf.filter(s => now-s.t <= 220);
+      swing={ active:true, arm, t0:pre.length?pre[0].t:now, peak:sp, samples:pre.slice() };
+      quietSince=0;
+      setChip('MENGAYUN…', true);
+    }else{
+      setChip('SIAP');
+    }
+    return;
   }
-  return 'SIAP';
-}
 
-function smoothLabel(label) {
-  labelHist.push(label);
-  if (labelHist.length > LABEL_SMOOTH_LEN) labelHist.shift();
-  const counts = {};
-  labelHist.forEach(l => counts[l] = (counts[l] || 0) + 1);
-  let best = label, bestCount = 0;
-  for (const k in counts) if (counts[k] > bestCount) { best = k; bestCount = counts[k]; }
-  const stability = bestCount / labelHist.length;
-  return { label: best, stability };
-}
+  // ---- sedang mengayun ----
+  const cur = swing.arm==='R' ? r : l;
+  const sp  = swing.arm==='R' ? spR : spL;
+  swing.samples.push({t:now,...cur});
+  if(sp>swing.peak) swing.peak=sp;
 
-// ---------- UI updates ----------
-function resetHistoryState() {
-  leftWristHist = []; rightWristHist = []; labelHist = []; lastLoggedLabel = null;
-}
+  if(sp<endTh){ if(!quietSince) quietSince=now; } else { quietSince=0; }
 
-function updateReadout(label, stability) {
-  strokeNameEl.textContent = label;
-  recLabel.textContent = label;
-  const pct = Math.round(stability * 100);
-  stabilityBarEl.style.width = pct + '%';
-  stabilityPctEl.textContent = pct + '%';
-
-  if (label !== lastLoggedLabel && stability >= STABILITY_LOG_THRESHOLD && label !== 'TIDAK TERDETEKSI') {
-    lastLoggedLabel = label;
-    addHistoryEntry(label);
+  const dur = now-swing.t0;
+  if((quietSince && now-quietSince>=END_QUIET_MS) || dur>SWING_MAX_MS){
+    finish(dur);
   }
 }
 
-function addHistoryEntry(label) {
-  if (historyEmptyEl) historyEmptyEl.remove();
-  const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const row = document.createElement('div');
-  row.className = 'history-item';
-  row.innerHTML = `<span class="history-time">${time}</span><span class="history-label">${label}</span>`;
-  historyListEl.prepend(row);
-  while (historyListEl.children.length > 8) {
-    historyListEl.removeChild(historyListEl.lastChild);
+function finish(dur){
+  const s=swing; swing={active:false,arm:s.arm,t0:0,peak:0,samples:[]};
+  cooldownUntil=performance.now()+COOLDOWN_MS;
+  quietSince=0;
+  setChip('SIAP');
+
+  if(dur<SWING_MIN_MS || dur>SWING_MAX_MS) return;
+  if(s.peak<cfg.peakSpeed) return;                 // gerakan terlalu lemah → diabaikan
+  if(s.samples.length<4) return;
+
+  const lat = s.samples.map(p=>p.lateral);
+  const hgt = s.samples.map(p=>p.height);
+  const maxH = Math.max(...hgt);
+  const minH = Math.min(...hgt);
+  const iMax = hgt.indexOf(maxH);
+  const vTravel = maxH - minH;
+  const hTravel = Math.max(...lat) - Math.min(...lat);
+  const netLat  = lat[lat.length-1] - lat[0];
+  const armSign = s.arm==='R' ? 1 : -1;
+
+  let label=null;
+
+  // --- Servis: naik jauh di atas kepala, lalu ADA hentakan turun setelah puncak ---
+  // (syarat turun ini yang mencegah "tangan diangkat lalu diam" terbaca sebagai servis)
+  const dropAfter = maxH - Math.min(...hgt.slice(iMax));
+  if(maxH>=cfg.serveHeight && vTravel>=0.45 && dropAfter>=0.35 && vTravel>hTravel*0.5){
+    label='SERVIS';
   }
+  // --- Groundstroke: lintasan mendatar jelas DAN searah (bukan bolak-balik) ---
+  else if(hTravel>=MIN_LATERAL_TRAVEL &&
+          Math.abs(netLat)>=0.35 &&
+          Math.abs(netLat)>=0.45*hTravel){          // uji arah: menyaring lambaian
+    const startSide = lat[0]*armSign;      // + = mulai di sisi lengan aktif
+    const cross     = netLat*armSign;      // – = menyapu menyilang badan
+    if(startSide>0.25 || cross<-0.35)      label='FOREHAND';
+    else if(startSide<-0.10 || cross>0.35) label='BACKHAND';
+    else                                   label = cross<0 ? 'FOREHAND':'BACKHAND';
+  }
+  if(!label) return;                        // gerakan tak dikenali → tidak dilabeli
+
+  emit(label, s.peak, dur, s.arm);
+}
+
+/* ============ Keluaran ============ */
+function emit(label, peak, dur, arm){
+  strokeEl.textContent=label; strokeEl.classList.remove('idle');
+  mSpeed.textContent=peak.toFixed(1);
+  mDur.textContent=(dur/1000).toFixed(2)+'s';
+  mArm.textContent= arm==='R' ? 'Kanan':'Kiri';
+  counts[label]=(counts[label]||0)+1; renderCounts();
+  addHist(label, peak);
+  flash.classList.add('on'); setTimeout(()=>flash.classList.remove('on'),160);
+}
+function renderCounts(){ cFH.textContent=counts.FOREHAND; cBH.textContent=counts.BACKHAND; cSV.textContent=counts.SERVIS; }
+function addHist(label, peak){
+  if(histEmpty.parentNode) histEmpty.style.display='none';
+  const t=new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const row=document.createElement('div');
+  row.className='hist-row';
+  row.innerHTML=`<span class="hist-t">${t}</span><span class="hist-n">${label}</span><span class="hist-s">${peak.toFixed(1)}</span>`;
+  histList.prepend(row);
+  while(histList.querySelectorAll('.hist-row').length>10) histList.querySelector('.hist-row:last-child').remove();
+}
+function setChip(text, swinging=false){
+  chipText.textContent=text;
+  chip.classList.toggle('swing', swinging);
+  chip.classList.toggle('live', !swinging);
+}
+
+/* ============ Gambar kerangka ============ */
+function draw(lm){
+  const W=canvas.width, H=canvas.height;
+  const conns = PoseLandmarker.POSE_CONNECTIONS;
+  ctx.lineCap='round'; ctx.lineJoin='round';
+
+  // garis: kontur gelap + isi putih agar kontras di latar apa pun
+  for(const pass of [{c:'rgba(8,61,41,.45)',w:7},{c:'#FFFFFF',w:3.4}]){
+    ctx.strokeStyle=pass.c; ctx.lineWidth=pass.w;
+    ctx.beginPath();
+    for(const c of conns){
+      const a=lm[c.start], b=lm[c.end];
+      if(!a||!b) continue;
+      if((a.visibility??1)<0.4||(b.visibility??1)<0.4) continue;
+      ctx.moveTo(a.x*W, a.y*H); ctx.lineTo(b.x*W, b.y*H);
+    }
+    ctx.stroke();
+  }
+  // sendi
+  for(let i=0;i<lm.length;i++){
+    const p=lm[i]; if((p.visibility??1)<0.4) continue;
+    ctx.beginPath(); ctx.arc(p.x*W,p.y*H,4.2,0,Math.PI*2);
+    ctx.fillStyle='#6FC79B'; ctx.fill();
+    ctx.lineWidth=1.6; ctx.strokeStyle='#FFFFFF'; ctx.stroke();
+  }
+  // penanda pergelangan aktif
+  const wr = lm[swing.active ? (swing.arm==='R'?L.R_WR:L.L_WR) : L.R_WR];
+  if(swing.active && wr){
+    ctx.beginPath(); ctx.arc(wr.x*W, wr.y*H, 15, 0, Math.PI*2);
+    ctx.lineWidth=3; ctx.strokeStyle='#1F8A5F'; ctx.stroke();
+  }
+}
+
+/* ============ Pendaftaran service worker (syarat PWA/APK) ============ */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js')
+      .catch(err => console.warn('Service worker gagal didaftarkan:', err));
+  });
 }
 </script>
 </body>
