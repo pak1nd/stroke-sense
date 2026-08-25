@@ -199,6 +199,19 @@
     cursor:pointer; border:3px solid #fff;
   }
 
+  .seg{ display:flex; gap:6px; }
+  .seg-btn{
+    flex:1; padding:10px 6px; font-size:13px; font-weight:600;
+    background:var(--surface); color:var(--muted);
+    border:1px solid var(--border); border-radius:9px; cursor:pointer;
+  }
+  .seg-btn.active{ background:var(--green-700); color:#fff; border-color:var(--green-700); }
+  .diag{
+    font-family:'JetBrains Mono',monospace; font-size:10.5px; line-height:1.6;
+    color:var(--green-700); background:var(--mint);
+    padding:9px 11px; border-radius:8px; margin:0; word-break:break-word;
+  }
+
   .note{ font-size:11.5px; line-height:1.55; color:var(--muted); padding:0 4px; margin:0; }
   .note b{ color:var(--green-700); }
 
@@ -287,6 +300,20 @@
       <p class="hint">Tinggi pergelangan tangan (satuan panjang badan, bahu ≈ 1.0) agar ayunan dihitung sebagai servis.</p>
     </div>
     <div class="slider-row">
+      <label>Tangan dominan pemain</label>
+      <div class="seg" id="handSeg">
+        <button class="seg-btn active" data-hand="R">Kanan</button>
+        <button class="seg-btn" data-hand="L">Kiri</button>
+        <button class="seg-btn" data-hand="A">Otomatis</button>
+      </div>
+      <p class="hint">Tetapkan sesuai pemain. Mode otomatis memilih pergelangan tercepat, namun kurang andal pada backhand dua tangan.</p>
+    </div>
+    <div class="slider-row">
+      <label>Diagnostik ayunan terakhir</label>
+      <p class="diag" id="diagLine">Belum ada data.</p>
+      <p class="hint">Nilai mentah untuk keperluan kalibrasi: tinggi puncak, rentang mendatar, arah fase kontak, dan jumlah pembalikan arah.</p>
+    </div>
+    <div class="slider-row">
       <button class="btn-ghost" id="resetBtn" style="width:100%">Reset Statistik Sesi</button>
     </div>
   </details>
@@ -300,7 +327,7 @@
     <p class="credit-role">Dikembangkan oleh</p>
     <p class="credit-name">Ahmad Indra Harahap, M.Kom</p>
     <p class="credit-aff">Dosen Ilmu Keolahragaan<br>Fakultas Ilmu Keolahragaan dan Kesehatan<br>Universitas Negeri Medan (UNIMED)</p>
-    <p class="credit-meta">Stroke Sense v2 · Prototipe Riset · 2026</p>
+    <p class="credit-meta">Stroke Sense v2.1 · Prototipe Riset · 2026</p>
   </footer>
 
 </div>
@@ -327,20 +354,36 @@ const cFH=document.getElementById('cFH'), cBH=document.getElementById('cBH'), cS
 const histList=document.getElementById('histList'), histEmpty=document.getElementById('histEmpty');
 const sSens=document.getElementById('sSens'), vSens=document.getElementById('vSens');
 const sServe=document.getElementById('sServe'), vServe=document.getElementById('vServe');
+const handSeg=document.getElementById('handSeg'), diagLine=document.getElementById('diagLine');
 
 /* ============ Konfigurasi ============ */
-const cfg = { peakSpeed:3.0, serveHeight:1.70 };
+const cfg = { peakSpeed:3.0, serveHeight:1.70, hand:'R' };
 sSens.addEventListener('input', e=>{ cfg.peakSpeed=parseFloat(e.target.value); vSens.textContent=cfg.peakSpeed.toFixed(1); });
 sServe.addEventListener('input', e=>{ cfg.serveHeight=parseFloat(e.target.value); vServe.textContent=cfg.serveHeight.toFixed(2); });
+
+handSeg.addEventListener('click', e=>{
+  const btn = e.target.closest('.seg-btn');
+  if(!btn) return;
+  cfg.hand = btn.dataset.hand==='A' ? 'AUTO' : btn.dataset.hand;
+  handSeg.querySelectorAll('.seg-btn').forEach(b=>b.classList.toggle('active', b===btn));
+});
+
+function simpanDebug(d){
+  diagLine.textContent =
+    `puncak ${d.peak.toFixed(1)} · tinggi ${d.maxH.toFixed(2)} · vertikal ${d.vTravel.toFixed(2)} · ` +
+    `mendatar ${d.hTravel.toFixed(2)} · arah ${d.dirLat.toFixed(2)} · balikan ${d.balikan}`;
+}
 
 const L = { NOSE:0, L_SH:11, R_SH:12, L_EL:13, R_EL:14, L_WR:15, R_WR:16, L_HIP:23, R_HIP:24 };
 const VIS_MIN = 0.5;            // ambang keyakinan landmark
 const EMA = 0.55;               // smoothing landmark (anti-getar)
 const BUF_MS = 1400;            // panjang riwayat lintasan
-const SWING_MIN_MS = 130, SWING_MAX_MS = 1600;
-const END_QUIET_MS = 150;       // durasi diam untuk menutup ayunan
-const COOLDOWN_MS = 500;
+const SWING_MIN_MS = 130, SWING_MAX_MS = 2200;
+const END_QUIET_MS = 200;       // durasi diam untuk menutup ayunan
+const COOLDOWN_MS = 400;
 const MIN_LATERAL_TRAVEL = 0.45; // travel minimum groundstroke (satuan setengah-bahu)
+const SERVE_LINK_MS = 1200;      // jendela penyambung fase naik & fase pukul servis
+const MAX_REVERSAL = 2;          // batas pembalikan arah (penyaring gerakan melambai)
 
 /* ============ State ============ */
 let landmarker=null, running=false, stream=null, facing='environment', raf=null;
@@ -349,6 +392,10 @@ let bufL=[], bufR=[];
 let swing={ active:false, arm:'R', t0:0, peak:0, samples:[] };
 let quietSince=0, cooldownUntil=0;
 let counts={ FOREHAND:0, BACKHAND:0, SERVIS:0 };
+let pendingServe=0;             // batas waktu penyambung fase servis
+let lastTs=0;                   // penjamin stempel waktu selalu menaik
+let lastFrameAt=0;              // pemantau: kapan bingkai terakhir diproses
+let watchdog=null;
 
 /* ============ Model ============ */
 async function initModel(){
@@ -386,6 +433,9 @@ async function start(){
     resetTracking();
     chip.classList.add('live');
     startBtn.textContent='Hentikan'; startBtn.classList.add('stop'); startBtn.disabled=false;
+    lastTs = Math.round(performance.now());
+    lastFrameAt = performance.now();
+    startWatchdog();
     raf = requestAnimationFrame(loop);
   }catch(err){
     startBtn.disabled=false;
@@ -395,6 +445,7 @@ async function start(){
 function stop(){
   running=false;
   if(raf) cancelAnimationFrame(raf);
+  stopWatchdog();
   if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
   ctx.clearRect(0,0,canvas.width,canvas.height);
   chip.classList.remove('live','swing'); chipText.textContent='BERHENTI';
@@ -405,7 +456,11 @@ function sizeCanvas(){ canvas.width=video.videoWidth||720; canvas.height=video.v
 function mirror(){ const t = facing==='user' ? 'scaleX(-1)':'none'; video.style.transform=t; canvas.style.transform=t; }
 function msg(t){ overlayMsg.innerHTML=t; overlayMsg.classList.remove('hidden'); }
 function hideMsg(){ overlayMsg.classList.add('hidden'); }
-function resetTracking(){ smooth=null; bufL=[]; bufR=[]; swing.active=false; quietSince=0; cooldownUntil=0; }
+function resetTracking(){
+  smooth=null; bufL=[]; bufR=[];
+  swing={active:false, arm:cfg.hand==='L'?'L':'R', t0:0, peak:0, samples:[]};
+  quietSince=0; cooldownUntil=0; pendingServe=0;
+}
 
 startBtn.addEventListener('click',()=> running?stop():start());
 flipBtn.addEventListener('click', async ()=>{
@@ -424,19 +479,53 @@ window.addEventListener('resize', ()=>{ if(running) sizeCanvas(); });
 /* ============ Loop ============ */
 function loop(){
   if(!running) return;
-  if(video.readyState>=2){
-    const res = landmarker.detectForVideo(video, performance.now());
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    if(res.landmarks && res.landmarks.length){
-      const lm = smoothLM(res.landmarks[0]);
-      if(keyVisible(lm)){ draw(lm); track(lm); }
-      else { draw(lm); setChip('POSISI TIDAK JELAS'); }
-    }else{
-      setChip('TIDAK ADA PEMAIN'); smooth=null; bufL=[]; bufR=[];
+  try{
+    if(video.readyState>=2){
+      // stempel waktu wajib selalu menaik; dua bingkai dengan nilai sama
+      // membuat pustaka melempar galat dan menghentikan loop selamanya
+      let ts = Math.round(performance.now());
+      if(ts<=lastTs) ts = lastTs+1;
+      lastTs = ts;
+      lastFrameAt = performance.now();
+
+      const res = landmarker.detectForVideo(video, ts);
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      if(res.landmarks && res.landmarks.length){
+        const lm = smoothLM(res.landmarks[0]);
+        if(keyVisible(lm)){ draw(lm); track(lm); }
+        else { draw(lm); setChip('POSISI TIDAK JELAS'); }
+      }else{
+        setChip('TIDAK ADA PEMAIN'); smooth=null; bufL=[]; bufR=[];
+      }
     }
+  }catch(err){
+    // satu bingkai gagal tidak boleh mematikan seluruh deteksi
+    console.warn('Bingkai dilewati:', err);
   }
   raf = requestAnimationFrame(loop);
 }
+
+/* Pemantau: bila loop berhenti (mis. tab tersembunyi atau galat tak terduga),
+   deteksi dijalankan ulang secara otomatis agar titik tubuh tidak membeku. */
+function startWatchdog(){
+  stopWatchdog();
+  watchdog = setInterval(()=>{
+    if(!running) return;
+    if(performance.now()-lastFrameAt > 1500){
+      lastTs = Math.round(performance.now());
+      if(raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(loop);
+    }
+  }, 1500);
+}
+function stopWatchdog(){ if(watchdog){ clearInterval(watchdog); watchdog=null; } }
+
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden && running){
+    lastTs = Math.round(performance.now());
+    lastFrameAt = performance.now();
+  }
+});
 
 function smoothLM(lm){
   if(!smooth){ smooth = lm.map(p=>({x:p.x,y:p.y,visibility:p.visibility??1})); return smooth; }
@@ -490,8 +579,13 @@ function track(lm){
   const startTh = cfg.peakSpeed*0.55, endTh = cfg.peakSpeed*0.32;
 
   if(!swing.active){
-    const arm = spR>=spL ? 'R':'L';
-    const sp  = Math.max(spL,spR);
+    // Lengan yang dilacak: mengikuti pengaturan tangan dominan bila ditetapkan.
+    // Mode otomatis memakai pergelangan tercepat, namun kurang andal pada
+    // backhand dua tangan karena lengan non-dominan bisa terpilih.
+    let arm;
+    if(cfg.hand==='R' || cfg.hand==='L') arm = cfg.hand;
+    else arm = spR>=spL ? 'R':'L';
+    const sp = arm==='R' ? spR : spL;
     if(sp>startTh && now>cooldownUntil){
       const buf = arm==='R'?bufR:bufL;
       // sertakan konteks 220 ms sebelum ayunan mulai (fase backswing)
@@ -500,7 +594,7 @@ function track(lm){
       quietSince=0;
       setChip('MENGAYUN…', true);
     }else{
-      setChip('SIAP');
+      setChip(pendingServe>now ? 'MENUNGGU PUKULAN SERVIS…' : 'SIAP');
     }
     return;
   }
@@ -519,44 +613,105 @@ function track(lm){
   }
 }
 
+/* Menghitung berapa kali arah gerak mendatar berbalik.
+   Pukulan sungguhan: 0–1 balikan (persiapan lalu sapuan).
+   Melambai / gerakan gelisah: 3 balikan atau lebih. */
+function hitungBalikan(arr){
+  let rev=0, dirPrev=0;
+  for(let i=1;i<arr.length;i++){
+    const d=arr[i]-arr[i-1];
+    if(Math.abs(d)<0.05) continue;          // abaikan getaran kecil
+    const dir=Math.sign(d);
+    if(dirPrev && dir!==dirPrev) rev++;
+    dirPrev=dir;
+  }
+  return rev;
+}
+
+/* Menentukan arah pukulan dari segmen searah dengan perpindahan mendatar
+   TERBESAR. Cara ini lebih andal daripada memakai fase tercepat, sebab
+   pada rekaman nyata fase persiapan kadang terbaca lebih cepat daripada
+   fase sapuan sehingga arahnya bisa terbalik. Sapuan pukulan selalu
+   merupakan perpindahan mendatar terbesar dalam satu ayunan. */
+function arahUtama(lat){
+  let segStart=0, best=0, dirPrev=0;
+  for(let i=1;i<lat.length;i++){
+    const d=lat[i]-lat[i-1];
+    if(Math.abs(d)<0.03) continue;
+    const dir=Math.sign(d);
+    if(dirPrev && dir!==dirPrev){
+      const v=lat[i-1]-lat[segStart];
+      if(Math.abs(v)>Math.abs(best)) best=v;
+      segStart=i-1;
+    }
+    dirPrev=dir;
+  }
+  const v=lat[lat.length-1]-lat[segStart];
+  if(Math.abs(v)>Math.abs(best)) best=v;
+  return best;
+}
+
 function finish(dur){
   const s=swing; swing={active:false,arm:s.arm,t0:0,peak:0,samples:[]};
-  cooldownUntil=performance.now()+COOLDOWN_MS;
+  const now=performance.now();
+  cooldownUntil=now+COOLDOWN_MS;
   quietSince=0;
-  setChip('SIAP');
 
-  if(dur<SWING_MIN_MS || dur>SWING_MAX_MS) return;
-  if(s.peak<cfg.peakSpeed) return;                 // gerakan terlalu lemah → diabaikan
-  if(s.samples.length<4) return;
+  if(dur<SWING_MIN_MS || dur>SWING_MAX_MS){ setChip('SIAP'); return; }
+  if(s.peak<cfg.peakSpeed){ setChip('SIAP'); return; }   // gerakan terlalu lemah
+  if(s.samples.length<4){ setChip('SIAP'); return; }
 
   const lat = s.samples.map(p=>p.lateral);
   const hgt = s.samples.map(p=>p.height);
+  const n   = lat.length;
   const maxH = Math.max(...hgt);
   const minH = Math.min(...hgt);
   const iMax = hgt.indexOf(maxH);
   const vTravel = maxH - minH;
   const hTravel = Math.max(...lat) - Math.min(...lat);
-  const netLat  = lat[lat.length-1] - lat[0];
+  const netLat  = lat[n-1] - lat[0];
+  const dropAfter = maxH - Math.min(...hgt.slice(iMax));
+  const startH = hgt[0], endH = hgt[n-1];
+  const rise = maxH - startH;              // seberapa jauh lengan naik dari posisi awal
   const armSign = s.arm==='R' ? 1 : -1;
+
+  // Arah pukulan: <0 menyapu menyilang badan (forehand), >0 menjauh (backhand)
+  const dirLat = arahUtama(lat) * armSign;
+  const balikan = hitungBalikan(lat);
+
+  simpanDebug({maxH, vTravel, hTravel, netLat, dirLat, balikan, peak:s.peak});
 
   let label=null;
 
-  // --- Servis: naik jauh di atas kepala, lalu ADA hentakan turun setelah puncak ---
-  // (syarat turun ini yang mencegah "tangan diangkat lalu diam" terbaca sebagai servis)
-  const dropAfter = maxH - Math.min(...hgt.slice(iMax));
-  if(maxH>=cfg.serveHeight && vTravel>=0.45 && dropAfter>=0.35 && vTravel>hTravel*0.5){
-    label='SERVIS';
+  // --- Servis lengkap: NAIK dulu di atas kepala, lalu ada hentakan turun ---
+  // Syarat "rise" mencegah gerakan menurunkan tangan dari atas terbaca sebagai servis.
+  if(maxH>=cfg.serveHeight && rise>=0.35 && vTravel>=0.45 && dropAfter>=0.30 && vTravel>hTravel*0.45){
+    label='SERVIS'; pendingServe=0;
   }
-  // --- Groundstroke: lintasan mendatar jelas DAN searah (bukan bolak-balik) ---
+  // --- Fase naik servis: berakhir tinggi tanpa hentakan turun ---
+  // Belum dilabeli. Bila disusul pukulan menurun yang cepat, keduanya
+  // disatukan sebagai servis. Bila tidak, tetap tanpa label — sehingga
+  // "mengangkat tangan lalu diam" tidak terbaca sebagai servis.
+  else if(maxH>=cfg.serveHeight && rise>=0.35 && vTravel>=0.45 && endH>=cfg.serveHeight-0.30 && dropAfter<0.30){
+    pendingServe = now + SERVE_LINK_MS;
+    setChip('MENUNGGU PUKULAN SERVIS…');
+    return;
+  }
+  // --- Fase pukul servis: menyusul fase naik, mulai tinggi lalu menukik cepat ---
+  else if(pendingServe>now &&
+          startH>=cfg.serveHeight-0.30 &&
+          (startH-minH)>=0.60 &&
+          s.peak>=cfg.peakSpeed*1.3){
+    label='SERVIS'; pendingServe=0;
+  }
+  // --- Groundstroke: lintasan mendatar jelas, searah, bukan bolak-balik ---
   else if(hTravel>=MIN_LATERAL_TRAVEL &&
-          Math.abs(netLat)>=0.35 &&
-          Math.abs(netLat)>=0.45*hTravel){          // uji arah: menyaring lambaian
-    const startSide = lat[0]*armSign;      // + = mulai di sisi lengan aktif
-    const cross     = netLat*armSign;      // – = menyapu menyilang badan
-    if(startSide>0.25 || cross<-0.35)      label='FOREHAND';
-    else if(startSide<-0.10 || cross>0.35) label='BACKHAND';
-    else                                   label = cross<0 ? 'FOREHAND':'BACKHAND';
+          Math.abs(dirLat)>=0.35 &&
+          balikan<=MAX_REVERSAL){
+    label = dirLat<0 ? 'FOREHAND' : 'BACKHAND';
   }
+
+  setChip('SIAP');
   if(!label) return;                        // gerakan tak dikenali → tidak dilabeli
 
   emit(label, s.peak, dur, s.arm);

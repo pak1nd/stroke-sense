@@ -7,7 +7,7 @@
    Jadi saat pertama kali membuka aplikasi, HP tetap perlu koneksi internet.
    Setelah itu, browser biasanya menyimpan sendiri berkas CDN tersebut. */
 
-const CACHE = 'stroke-sense-v2';
+const CACHE = 'stroke-sense-v3';
 
 const SHELL = [
   './',
